@@ -3,8 +3,37 @@ name = "keyboard-controller"
 version = "0.1.0"
 edition = "2024"
 
+# --- Add these two lines ---
+description = "A GTK4-based keyboard controller application"
+license = "MIT" 
+# ---------------------------
+
 [dependencies]
 gtk4 = "0.9"
 glib = "0.20"
 glob = "0.3"
 gdk4 = "0.9"
+
+[package.metadata.rpm]
+package = "keyboard-controller"
+files = { "rusty-kb.desktop" = { path = "/usr/share/applications/rusty-kb.desktop" }, "icon.png" = { path = "/usr/share/icons/hicolor/256x256/apps/rusty-kb.png" }, "setcolor.sh" = { path = "/usr/lib/rusty-kb/setcolor.sh", mode = "755" }, "rusty-kb.service" = { path = "/usr/lib/systemd/user/rusty-kb.service" }, "99-rusty-kb.rules" = { path = "/etc/udev/rules.d/99-rusty-kb.rules" } }
+
+[package.metadata.rpm.cargo]
+buildflags = ["--release"]
+
+[package.metadata.rpm.targets]
+keyboard-controller = { path = "/usr/bin/keyboard-controller" }
+
+[package.metadata.deb]
+maintainer = "mrscratchcat <maintainer@localhost>"
+section = "utils"
+ depends = "libgtk-4-1, libglib2.0-0, libgdk-4-1"
+ assets = [
+     ["target/release/keyboard-controller", "/usr/bin/keyboard-controller", "755"],
+     ["rusty-kb.desktop", "/usr/share/applications/rusty-kb.desktop", "644"],
+     ["icon.png", "/usr/share/icons/hicolor/256x256/apps/rusty-kb.png", "644"],
+     ["setcolor.sh", "/usr/lib/rusty-kb/setcolor.sh", "755"],
+     ["rusty-kb.service", "/usr/lib/systemd/user/rusty-kb.service", "644"],
+     ["udev/99-rusty-kb.rules", "/etc/udev/rules.d/99-rusty-kb.rules", "644"],
+ ]
+ maintainer-scripts = "debian"

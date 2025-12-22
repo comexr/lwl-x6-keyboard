@@ -2,7 +2,7 @@
 Description=Set Keyboard Color Script
 
 [Service]
-ExecStart=/home/user/.rusty-kb/setcolor.sh
+ExecStart=/usr/lib/rusty-kb/setcolor.sh
 Type=oneshot
 RemainAfterExit=yes
 

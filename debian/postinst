@@ -1,0 +1,50 @@
+#!/bin/sh
+set -e
+
+GROUP=rustykb
+
+ensure_group() {
+    if getent group "$GROUP" >/dev/null; then
+        return
+    fi
+    if command -v addgroup >/dev/null 2>&1; then
+        addgroup --system "$GROUP" >/dev/null 2>&1 || true
+    else
+        groupadd -r "$GROUP" >/dev/null 2>&1 || true
+    fi
+}
+
+add_user_to_group() {
+    user="$1"
+    [ -n "$user" ] || return 0
+    id "$user" >/dev/null 2>&1 || return 0
+    if command -v adduser >/dev/null 2>&1; then
+        adduser "$user" "$GROUP" >/dev/null 2>&1 || true
+    else
+        usermod -a -G "$GROUP" "$user" >/dev/null 2>&1 || true
+    fi
+}
+
+ensure_group
+
+# Best guess for the installer-invoking user
+USER_TO_ADD="${SUDO_USER:-$(logname 2>/dev/null || true)}"
+add_user_to_group "$USER_TO_ADD"
+
+# Also add all regular (uid >= 1000) login-capable users so unattended installs work
+while IFS=: read -r name _ uid _ _ _ shell; do
+    case "$shell" in
+        *nologin|false|"") continue ;;
+    esac
+    if [ "$uid" -ge 1000 ]; then
+        add_user_to_group "$name"
+    fi
+done </etc/passwd
+
+# Reload and trigger udev so permissions apply immediately
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload >/dev/null 2>&1 || true
+    udevadm trigger --subsystem-match=leds >/dev/null 2>&1 || true
+fi
+
+exit 0

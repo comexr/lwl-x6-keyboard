@@ -1,0 +1,2 @@
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="rgb:kbd_backlight*", RUN+="/bin/chown -f root:rustykb /sys/class/leds/%k/brightness /sys/class/leds/%k/multi_intensity", RUN+="/bin/chmod -f g+w /sys/class/leds/%k/brightness /sys/class/leds/%k/multi_intensity"
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="rgb:lightbar", RUN+="/bin/chown -f root:rustykb /sys/class/leds/%k/brightness /sys/class/leds/%k/multi_intensity", RUN+="/bin/chmod -f g+w /sys/class/leds/%k/brightness /sys/class/leds/%k/multi_intensity"
