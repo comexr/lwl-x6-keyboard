@@ -17,4 +17,14 @@ As last you need to install it with:
 ```bash
 make install
 ```
-You can find the app under the name 'TF Keyboard controller' or you can run it via the terminal with the command``` keyboard-controller ```
+To build it for debian execute:
+```bash
+cargo deb
+```
+To build for rpm execute:
+```bash
+rpmbuild -ba target/release/rpmbuild/SPECS/keyboard-controller.spec \
+  -D "_topdir $(pwd)/target/release/rpmbuild" \
+  -D "_tmppath $(pwd)target/release/rpmbuild/tmp"
+```
+You can find the app under the name ```TF Keyboard controller``` or you can run it via the terminal with the command``` keyboard-controller ```
