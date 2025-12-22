@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=TF Keyboard Controller
+Comment=Rust Written Keyboard Controller
+Exec=/bin/keyboard-controller
+Icon=/home/user/.rusty-kb/icon.png
+Terminal=false
+Categories=Utility;
