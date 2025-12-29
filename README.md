@@ -13,10 +13,8 @@ Then you need to clone the repo:
 ```bash
 git clone https://github.com/comexr/LWL-TONGFANG-Keyboard-LED-controller && cd LWL-TONGFANG-Keyboard-LED-controller
 ```
-As last you need to install it with:
-```bash
-make install
-```
+
+Now you need to Build it for your system
 To build it for debian execute:
 ```bash
 cargo deb
