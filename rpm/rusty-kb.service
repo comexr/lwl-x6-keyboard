@@ -1,0 +1,10 @@
+[Unit]
+Description=Set Keyboard Color Script
+
+[Service]
+ExecStart=/usr/lib/rusty-kb/setcolor.sh %h/.rusty-kb/colors.txt
+Type=oneshot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target
