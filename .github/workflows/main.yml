@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install dependencies
-        run: sudo apt install -y git devscripts dh-sequence-dkms debhelper rpm build-essential cargo && cargo add deb
+        run: sudo apt install -y git devscripts dh-sequence-dkms debhelper rpm build-essential cargo && cargo install cargo-deb
 
       - name: Build DEB Package
         run: cargo deb
