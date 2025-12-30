@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y git devscripts dh-sequence-dkms debhelper rpm build-essential cargo libglib2.0-dev
+          sudo apt-get install -y git devscripts dh-sequence-dkms debhelper rpm build-essential cargo libgtk-3-dev
           cargo install cargo-deb
         
       - name: Build DEB Package
