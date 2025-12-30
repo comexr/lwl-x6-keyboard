@@ -21,7 +21,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y git devscripts dh-sequence-dkms debhelper rpm build-essential cargo libgtk-4-dev
           cargo install cargo-deb cargo-rpm
-        
+       
       - name: Build DEB Package
         run: cargo deb
 
@@ -29,7 +29,16 @@ jobs:
         run: mv rpm .rpm && cargo rpm build || true && rpmbuild -ba target/release/rpmbuild/SPECS/keyboard-controller.spec -D "_topdir $(pwd)/target/release/rpmbuild" -D "_tmppath $(pwd)target/release/rpmbuild/tmp"
 
       - name: Confirm builds complete
-        run: mkdir release && sudo install -m 644 -o runner -g runner $(find .. -type f -name *.deb && find /home/runner/rpmbuild/RPMS/noarch -type f -name *.rpm) release/
+        # FIX: Updated paths to match where the files actually are
+        run: |
+          mkdir -p release
+          # Find the DEB file in the target directory (safest method)
+          find target -name "*.deb" -exec cp {} release/ \;
+          # Copy the RPM from the x86_64 folder you identified
+          cp target/release/rpmbuild/RPMS/x86_64/*.rpm release/
+          
+          # List files to verify in the logs
+          ls -l release/
 
       - name: Release
         uses: softprops/action-gh-release@v1
