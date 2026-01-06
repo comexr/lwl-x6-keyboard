@@ -26,7 +26,7 @@ jobs:
         run: cargo deb
 
       - name: Build RPM Package
-        run: mv rpm .rpm && cargo rpm build || true && rpmbuild -ba target/release/rpmbuild/SPECS/keyboard-controller.spec -D "_topdir $(pwd)/target/release/rpmbuild" -D "_tmppath $(pwd)target/release/rpmbuild/tmp"
+        run: mv rpm .rpm && cargo rpm build || true && rpmbuild -ba target/release/rpmbuild/SPECS/lwl-x6-keyboard.spec -D "_topdir $(pwd)/target/release/rpmbuild" -D "_tmppath $(pwd)target/release/rpmbuild/tmp"
 
       - name: Confirm builds complete
         run: |

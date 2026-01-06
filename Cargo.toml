@@ -1,5 +1,5 @@
 [package]
-name = "keyboard-controller"
+name = "lwl-x6-keyboard"
 version = "0.1.0"
 edition = "2024"
 
@@ -15,21 +15,21 @@ glob = "0.3"
 gdk4 = "0.9"
 
 [package.metadata.rpm]
-package = "keyboard-controller"
+package = "lwl-x6-keyboard"
 files = { "rusty-kb.desktop" = { path = "/usr/share/applications/rusty-kb.desktop" }, "icon.png" = { path = "/usr/share/icons/hicolor/256x256/apps/rusty-kb.png" }, "setcolor.sh" = { path = "/usr/lib/rusty-kb/setcolor.sh", mode = "755" }, "rusty-kb.service" = { path = "/usr/lib/systemd/user/rusty-kb.service" }, "99-rusty-kb.rules" = { path = "/etc/udev/rules.d/99-rusty-kb.rules" }, "colors.txt" = { path = "/usr/lib/rusty-kb/colors.txt" } }
 
 [package.metadata.rpm.cargo]
 buildflags = ["--release"]
 
 [package.metadata.rpm.targets]
-keyboard-controller = { path = "/usr/bin/keyboard-controller" }
+lwl-x6-keyboard = { path = "/usr/bin/lwl-x6-keyboard" }
 
 [package.metadata.deb]
 maintainer = "mrscratchcat <maintainer@localhost>"
 section = "utils"
  depends = "libgtk-4-1, libglib2.0-0"
  assets = [
-     ["target/release/keyboard-controller", "/usr/bin/keyboard-controller", "755"],
+     ["target/release/lwl-x6-keyboard", "/usr/bin/lwl-x6-keyboard", "755"],
      ["rusty-kb.desktop", "/usr/share/applications/rusty-kb.desktop", "644"],
      ["icon.png", "/usr/share/icons/hicolor/256x256/apps/rusty-kb.png", "644"],
      ["setcolor.sh", "/usr/lib/rusty-kb/setcolor.sh", "755"],

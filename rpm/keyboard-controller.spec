@@ -2,7 +2,7 @@
 %define __os_install_post %{_dbpath}/brp-compress
 %define debug_package %{nil}
 
-Name: keyboard-controller
+Name: lwl-x6-keyboard
 Summary: A GTK4-based keyboard controller application
 Version: @@VERSION@@
 Release: @@RELEASE@@%{?dist}
@@ -60,7 +60,7 @@ fi
 
 %files
 %defattr(-,root,root,-)
-%{_bindir}/keyboard-controller
+%{_bindir}/lwl-x6-keyboard
 %{_datadir}/applications/rusty-kb.desktop
 %{_datadir}/icons/hicolor/256x256/apps/rusty-kb.png
 /usr/lib/rusty-kb/setcolor.sh

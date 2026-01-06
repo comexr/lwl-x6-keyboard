@@ -28,8 +28,8 @@ mv rpm .rpm
 ```
 ```bash
 cargo rpm build || true
-rpmbuild -ba target/release/rpmbuild/SPECS/keyboard-controller.spec \
+rpmbuild -ba target/release/rpmbuild/SPECS/lwl-x6-keyboard.spec \
   -D "_topdir $(pwd)/target/release/rpmbuild" \
   -D "_tmppath $(pwd)target/release/rpmbuild/tmp"
 ```
-You can find the app under the name ```TF Keyboard controller``` or you can run it via the terminal with the command``` keyboard-controller ```
+You can find the app under the name ```TF Keyboard controller``` or you can run it via the terminal with the command``` lwl-x6-keyboard ```

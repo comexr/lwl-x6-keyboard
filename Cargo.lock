@@ -403,7 +403,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "keyboard-controller"
+name = "lwl-x6-keyboard"
 version = "0.1.0"
 dependencies = [
  "gdk4",
