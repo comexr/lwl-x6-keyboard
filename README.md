@@ -1,3 +1,8 @@
+Quick easy installer:
+```bash
+curl -fsSL https://raw.githubusercontent.com/comexr/lwl-x6-keyboard/refs/heads/main/install.sh | sh
+```
+
 lwl-driver are needed you can find them here: https://comexr.github.io/ 
 
 To install the app you firts need Rust installed and Cargo:
