@@ -5,14 +5,14 @@ use gtk4::{
 use gdk4::RGBA;
 use std::cell::{Cell, RefCell};
 use std::env;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Seek, SeekFrom, Write};
+use std::fs;
 use std::path::PathBuf;
 use glob::glob;
 use std::rc::Rc;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::thread;
+use crossbeam::thread::scope;
 
 const KB_BACKLIGHT_PATTERN: &str = "/sys/class/leds/rgb:kbd_backlight*";
 const LIGHTBAR_PATH: &str = "/sys/class/leds/rgb:lightbar";
@@ -64,31 +64,60 @@ fn rgba_to_rgb8(rgba: &RGBA) -> (u8, u8, u8) {
     (r, g, b)
 }
 
+struct PersistState {
+    kb_color: u32,
+    kb_brightness: i32,
+    lb_color: Option<u32>,
+    lb_brightness: Option<i32>,
+}
+
+fn spawn_persistence_worker() -> (Arc<Mutex<Option<PersistState>>>, mpsc::SyncSender<()>) {
+    let state = Arc::new(Mutex::new(None::<PersistState>));
+    let state_for_thread = Arc::clone(&state);
+    let (tx, rx) = mpsc::sync_channel::<()>(1);
+    thread::spawn(move || {
+        while rx.recv().is_ok() {
+            let pending = {
+                let mut s = state_for_thread.lock().unwrap();
+                s.take()
+            };
+            if let Some(ps) = pending {
+                let Some(home) = env::var("HOME").ok() else { continue; };
+                let path = PathBuf::from(home).join(".rusty-kb").join("colors.txt");
+                if let Some(parent) = path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let (kr, kg, kbv) = unpack_rgb(ps.kb_color);
+                let lb_line = if let Some(lb) = ps.lb_color {
+                    let (r, g, b) = unpack_rgb(lb);
+                    format!("{} {} {} {}", r, g, b, ps.lb_brightness.unwrap_or(0))
+                } else {
+                    format!("0 0 0 {}", ps.lb_brightness.unwrap_or(0))
+                };
+                let content = format!("{} {} {} {}\n{}\n", kr, kg, kbv, ps.kb_brightness, lb_line);
+                let _ = fs::write(&path, content);
+            }
+        }
+    });
+    (state, tx)
+}
+
 fn persist_color_state(
+    state: &Arc<Mutex<Option<PersistState>>>,
+    tx: &mpsc::SyncSender<()>,
     kb_color: u32,
     kb_brightness: i32,
     lb_color: Option<u32>,
     lb_brightness: Option<i32>,
 ) {
-    let Some(home) = env::var("HOME").ok() else { return; };
-    let path = PathBuf::from(home).join(".rusty-kb").join("colors.txt");
-    if let Some(parent) = path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            eprintln!("Error creating state dir {:?}: {}", parent, e);
-            return;
-        }
-    }
-    let (kr, kg, kbv) = unpack_rgb(kb_color);
-    let lb_line = if let Some(lb) = lb_color {
-        let (r, g, b) = unpack_rgb(lb);
-        format!("{} {} {} {}", r, g, b, lb_brightness.unwrap_or(0))
-    } else {
-        format!("0 0 0 {}", lb_brightness.unwrap_or(0))
-    };
-    let content = format!("{} {} {} {}\n{}\n", kr, kg, kbv, kb_brightness, lb_line);
-    if let Err(e) = fs::write(&path, content) {
-        eprintln!("Error writing color state {:?}: {}", path, e);
-    }
+    let mut s = state.lock().unwrap();
+    *s = Some(PersistState {
+        kb_color,
+        kb_brightness,
+        lb_color,
+        lb_brightness,
+    });
+    let _ = tx.try_send(());
 }
 
 fn dropdown_for_colors(
@@ -158,39 +187,26 @@ fn write_brightness(path: &PathBuf, val: i32) {
     }
 }
 
-fn open_writers(paths: &[PathBuf], leaf: &str) -> Vec<File> {
-    let mut out = Vec::new();
-    for p in paths {
-        match OpenOptions::new().write(true).open(p.join(leaf)) {
-            Ok(f) => out.push(f),
-            Err(e) => eprintln!("Error opening {:?}/{}: {}", p, leaf, e),
-        }
-    }
-    out
-}
-
-fn write_all_files(files: &mut [File], content: &[u8]) {
-    for f in files {
-        if let Err(e) = f
-            .seek(SeekFrom::Start(0))
-            .and_then(|_| f.write_all(content))
-            .and_then(|_| f.flush())
-        {
-            eprintln!("Error writing sysfs value: {}", e);
-        }
-    }
-}
-
 fn write_color_all(paths: &[PathBuf], r: u8, g: u8, b: u8) {
-    for p in paths {
-        write_color(p, r, g, b);
-    }
+    scope(|s| {
+        paths.iter().for_each(|p| {
+            let p = p.clone();
+            s.spawn(move |_| {
+                write_color(&p, r, g, b);
+            });
+        });
+    }).unwrap();
 }
 
 fn write_brightness_all(paths: &[PathBuf], val: i32) {
-    for p in paths {
-        write_brightness(p, val);
-    }
+    scope(|s| {
+        paths.iter().for_each(|p| {
+            let p = p.clone();
+            s.spawn(move |_| {
+                write_brightness(&p, val);
+            });
+        });
+    }).unwrap();
 }
 
 fn read_color(path: &PathBuf) -> Option<(u8, u8, u8)> {
@@ -215,28 +231,58 @@ fn read_brightness(path: &PathBuf) -> Option<i32> {
     None
 }
 
+fn read_color_parallel(paths: &[PathBuf]) -> Option<(u8, u8, u8)> {
+    use std::sync::{Arc, Mutex};
+    let result = Arc::new(Mutex::new(None));
+    scope(|s| {
+        paths.iter().for_each(|p| {
+            let p = p.clone();
+            let result = Arc::clone(&result);
+            s.spawn(move |_| {
+                if let Some(color) = read_color(&p) {
+                    let mut r = result.lock().unwrap();
+                    if r.is_none() {
+                        *r = Some(color);
+                    }
+                }
+            });
+        });
+    }).unwrap();
+    let inner = Arc::try_unwrap(result).ok().unwrap();
+    inner.into_inner().unwrap()
+}
+
+fn read_brightness_parallel(paths: &[PathBuf]) -> Option<i32> {
+    use std::sync::{Arc, Mutex};
+    let result = Arc::new(Mutex::new(None));
+    scope(|s| {
+        paths.iter().for_each(|p| {
+            let p = p.clone();
+            let result = Arc::clone(&result);
+            s.spawn(move |_| {
+                if let Some(brightness) = read_brightness(&p) {
+                    let mut r = result.lock().unwrap();
+                    if r.is_none() {
+                        *r = Some(brightness);
+                    }
+                }
+            });
+        });
+    }).unwrap();
+    let inner = Arc::try_unwrap(result).ok().unwrap();
+    inner.into_inner().unwrap()
+}
+
 // Coalescing worker: only apply the most recent value received (no sender-side backlog)
 fn spawn_kb_color_worker(paths: Vec<PathBuf>) -> (Arc<AtomicU32>, mpsc::SyncSender<()>) {
     let latest = Arc::new(AtomicU32::new(0));
     let latest_for_thread = Arc::clone(&latest);
     let (tx, rx) = mpsc::sync_channel::<()>(1);
     thread::spawn(move || {
-        let mut last_applied: Option<u32> = None;
-        let mut color_files = open_writers(&paths, "multi_intensity");
         while rx.recv().is_ok() {
-            while rx.try_recv().is_ok() {}
             let v = latest_for_thread.load(Ordering::Relaxed);
-            if last_applied == Some(v) {
-                continue;
-            }
             let (r, g, b) = unpack_rgb(v);
-            if !color_files.is_empty() {
-                let content = format!("{} {} {}\n", r, g, b);
-                write_all_files(&mut color_files, content.as_bytes());
-            } else {
-                write_color_all(&paths, r, g, b);
-            }
-            last_applied = Some(v);
+            write_color_all(&paths, r, g, b);
         }
     });
     (latest, tx)
@@ -247,21 +293,9 @@ fn spawn_kb_brightness_worker(paths: Vec<PathBuf>) -> (Arc<AtomicI32>, mpsc::Syn
     let latest_for_thread = Arc::clone(&latest);
     let (tx, rx) = mpsc::sync_channel::<()>(1);
     thread::spawn(move || {
-        let mut last_applied: Option<i32> = None;
-        let mut brightness_files = open_writers(&paths, "brightness");
         while rx.recv().is_ok() {
-            while rx.try_recv().is_ok() {}
             let v = latest_for_thread.load(Ordering::Relaxed);
-            if last_applied == Some(v) {
-                continue;
-            }
-            if !brightness_files.is_empty() {
-                let content = format!("{}\n", v);
-                write_all_files(&mut brightness_files, content.as_bytes());
-            } else {
-                write_brightness_all(&paths, v);
-            }
-            last_applied = Some(v);
+            write_brightness_all(&paths, v);
         }
     });
     (latest, tx)
@@ -272,16 +306,10 @@ fn spawn_lb_color_worker(path: PathBuf) -> (Arc<AtomicU32>, mpsc::SyncSender<()>
     let latest_for_thread = Arc::clone(&latest);
     let (tx, rx) = mpsc::sync_channel::<()>(1);
     thread::spawn(move || {
-        let mut last_applied: Option<u32> = None;
         while rx.recv().is_ok() {
-            while rx.try_recv().is_ok() {}
             let v = latest_for_thread.load(Ordering::Relaxed);
-            if last_applied == Some(v) {
-                continue;
-            }
             let (r, g, b) = unpack_rgb(v);
             write_color(&path, r, g, b);
-            last_applied = Some(v);
         }
     });
     (latest, tx)
@@ -292,15 +320,9 @@ fn spawn_lb_brightness_worker(path: PathBuf) -> (Arc<AtomicI32>, mpsc::SyncSende
     let latest_for_thread = Arc::clone(&latest);
     let (tx, rx) = mpsc::sync_channel::<()>(1);
     thread::spawn(move || {
-        let mut last_applied: Option<i32> = None;
         while rx.recv().is_ok() {
-            while rx.try_recv().is_ok() {}
             let v = latest_for_thread.load(Ordering::Relaxed);
-            if last_applied == Some(v) {
-                continue;
-            }
             write_brightness(&path, v);
-            last_applied = Some(v);
         }
     });
     (latest, tx)
@@ -331,6 +353,9 @@ fn main() {
         let kb_color_shared: Rc<RefCell<Option<Arc<AtomicU32>>>> = Rc::new(RefCell::new(None));
         let kb_brightness_shared: Rc<RefCell<Option<Arc<AtomicI32>>>> = Rc::new(RefCell::new(None));
 
+        // Background persistence worker to avoid blocking UI
+        let (persist_state, tx_persist) = spawn_persistence_worker();
+
         // Keyboard Section
         let kb_paths = find_kb_paths();
         if let Some(primary_path) = pick_primary(&kb_paths) {
@@ -352,8 +377,8 @@ fn main() {
             let color_box = Box::new(Orientation::Horizontal, 10);
             color_box.append(&Label::new(Some("Color:")));
 
-            // Initialize color from current hardware state
-            let initial_kb_color = read_color(&primary_path).unwrap_or((255, 255, 255));
+            // Initialize color from current hardware state (parallel read for speed)
+            let initial_kb_color = read_color_parallel(&kb_paths).unwrap_or((255, 255, 255));
 
             // Updates via coalescing worker (applied on SetColor)
             let (latest_kb_color, tx_kb_color) = spawn_kb_color_worker(kb_write_paths.clone());
@@ -380,6 +405,8 @@ fn main() {
             let lb_available_for_dropdown = lb_available.clone();
             let kb_brightness_for_dropdown = kb_brightness_shared.clone();
             let lb_brightness_for_dropdown = Arc::clone(&shared_lb_brightness);
+            let persist_state_for_dropdown = Arc::clone(&persist_state);
+            let tx_persist_for_dropdown = tx_persist.clone();
             let dropdown = dropdown_for_colors(&preset_colors, initial_kb_color, move |rgba| {
                 let (r, g, b) = rgba_to_rgb8(&rgba);
                 latest_kb_color_for_dropdown.store(pack_rgb(r, g, b), Ordering::Relaxed);
@@ -400,6 +427,8 @@ fn main() {
                     None
                 };
                 persist_color_state(
+                    &persist_state_for_dropdown,
+                    &tx_persist_for_dropdown,
                     latest_kb_color_for_dropdown.load(Ordering::Relaxed),
                     kb_brightness_val,
                     lb_state,
@@ -413,8 +442,8 @@ fn main() {
             let bright_box = Box::new(Orientation::Vertical, 4);
             bright_box.append(&Label::builder().label("Brightness (0-50)").halign(gtk4::Align::Start).build());
             let kb_bright_scale = Scale::with_range(Orientation::Horizontal, 0.0, 50.0, 1.0);
-            // Initialize brightness from current hardware state
-            let initial_kb_brightness = read_brightness(&primary_path);
+            // Initialize brightness from current hardware state (parallel read for speed)
+            let initial_kb_brightness = read_brightness_parallel(&kb_paths);
             if let Some(val) = initial_kb_brightness {
                 kb_bright_scale.set_value(val as f64);
             }
@@ -430,6 +459,8 @@ fn main() {
             let lb_available_for_brightness = lb_available.clone();
             let lb_color_for_brightness = Arc::clone(&shared_lb_color);
             let lb_brightness_for_brightness = Arc::clone(&shared_lb_brightness);
+            let persist_state_for_brightness = Arc::clone(&persist_state);
+            let tx_persist_for_brightness = tx_persist.clone();
             kb_bright_scale.connect_value_changed(move |scale| {
                 let val = scale.value() as i32;
                 latest_kb_bright_for_cb.store(val, Ordering::Relaxed);
@@ -449,7 +480,7 @@ fn main() {
                 } else {
                     None
                 };
-                persist_color_state(kb_color_val, val, lb_color_val, lb_brightness_val);
+                persist_color_state(&persist_state_for_brightness, &tx_persist_for_brightness, kb_color_val, val, lb_color_val, lb_brightness_val);
             });
             // Sync initial brightness across all per-key LEDs. Many devices expose
             // per-key LEDs with independent brightness values; if most are 0,
@@ -513,6 +544,8 @@ fn main() {
             let kb_color_for_dropdown = kb_color_shared.clone();
             let kb_brightness_for_dropdown = kb_brightness_shared.clone();
             let lb_brightness_for_dropdown = Arc::clone(&shared_lb_brightness);
+            let persist_state_for_lb_dropdown = Arc::clone(&persist_state);
+            let tx_persist_for_lb_dropdown = tx_persist.clone();
             let dropdown = dropdown_for_colors(&preset_colors, initial_lb_color, move |rgba| {
                 let (r, g, b) = rgba_to_rgb8(&rgba);
                 latest_lb_color_for_dropdown.store(pack_rgb(r, g, b), Ordering::Relaxed);
@@ -530,6 +563,8 @@ fn main() {
                     .unwrap_or(0);
                 let lb_brightness_val = lb_brightness_for_dropdown.load(Ordering::Relaxed);
                 persist_color_state(
+                    &persist_state_for_lb_dropdown,
+                    &tx_persist_for_lb_dropdown,
                     kb_state,
                     kb_brightness_val,
                     Some(latest_lb_color_for_dropdown.load(Ordering::Relaxed)),
@@ -558,6 +593,8 @@ fn main() {
             let shared_lb_brightness_for_cb = Arc::clone(&shared_lb_brightness);
             let kb_color_for_lb_brightness = kb_color_shared.clone();
             let kb_brightness_for_lb_brightness = kb_brightness_shared.clone();
+            let persist_state_for_lb_brightness = Arc::clone(&persist_state);
+            let tx_persist_for_lb_brightness = tx_persist.clone();
             lb_bright_scale.connect_value_changed(move |scale| {
                 let val = scale.value() as i32;
                 latest_lb_bright.store(val, Ordering::Relaxed);
@@ -574,6 +611,8 @@ fn main() {
                     .map(|b: &Arc<AtomicI32>| b.load(Ordering::Relaxed))
                     .unwrap_or(0);
                 persist_color_state(
+                    &persist_state_for_lb_brightness,
+                    &tx_persist_for_lb_brightness,
                     kb_color_val,
                     kb_brightness_val,
                     Some(shared_lb_color.load(Ordering::Relaxed)),
