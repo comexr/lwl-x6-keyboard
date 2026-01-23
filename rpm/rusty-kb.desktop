@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=TF Keyboard Controller
+Name=LWL Keyboard Controller
 Comment=Rust Written Keyboard Controller
 Exec=/usr/bin/lwl-x6-keyboard
 Icon=rusty-kb
