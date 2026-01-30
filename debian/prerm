@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl --global disable rusty-kb.service >/dev/null 2>&1 || true
+            systemctl stop rusty-kb.service >/dev/null 2>&1 || true
+        fi
+
+        if command -v udevadm >/dev/null 2>&1; then
+            udevadm control --reload >/dev/null 2>&1 || true
+        fi
+        ;;
+    failed-upgrade)
+        ;;
+    *)
+        echo "prerm called with unknown argument '$1'"
+        exit 1
+        ;;
+esac
+
+exit 0

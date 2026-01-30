@@ -1,0 +1,8 @@
+lwl-x6-keyboard (0.1.0-1) UNRELEASED; urgency=low
+
+  * Initial release for Debian/Ubuntu
+  * GTK4-based keyboard controller for LWL X6 keyboards
+  * Includes system tray application and systemd user service
+  * Handles automatic color restoration on login
+
+ -- mrscratchcat <maintainer@localhost>  Fri, 30 Jan 2026 11:44:39 +0100

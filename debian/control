@@ -1,0 +1,15 @@
+Source: lwl-x6-keyboard
+Section: utils
+Priority: optional
+Maintainer: mrscratchcat <maintainer@localhost>
+Build-Depends: cargo, debhelper-compat (= 13), rustc, libgtk-4-dev, libglib2.0-dev
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: lwl-x6-keyboard
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libgtk-4-1 (>= 4.0), libglib2.0-0 (>= 2.50)
+Description: A GTK4-based keyboard controller application
+ Controls keyboard backlight color and effects for LWL X6 keyboards.
+ Provides a system tray application and systemd user service for
+ automatic color restoration on login.

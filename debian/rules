@@ -1,0 +1,43 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release --manifest-path Cargo.toml
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/lwl-x6-keyboard
+
+	mkdir -p debian/lwl-x6-keyboard/usr/bin
+	cp target/release/lwl-x6-keyboard debian/lwl-x6-keyboard/usr/bin/
+
+	mkdir -p debian/lwl-x6-keyboard/usr/share/applications
+	cp rusty-kb.desktop debian/lwl-x6-keyboard/usr/share/applications/
+
+	mkdir -p debian/lwl-x6-keyboard/usr/share/icons/hicolor/256x256/apps
+	cp icon.png debian/lwl-x6-keyboard/usr/share/icons/hicolor/256x256/apps/rusty-kb.png
+
+	mkdir -p debian/lwl-x6-keyboard/usr/lib/rusty-kb
+	cp setcolor.sh debian/lwl-x6-keyboard/usr/lib/rusty-kb/
+	chmod 755 debian/lwl-x6-keyboard/usr/lib/rusty-kb/setcolor.sh
+
+	mkdir -p debian/lwl-x6-keyboard/usr/lib/systemd/user
+	cp rusty-kb.service debian/lwl-x6-keyboard/usr/lib/systemd/user/
+
+	mkdir -p debian/lwl-x6-keyboard/etc/udev/rules.d
+	cp udev/99-rusty-kb.rules debian/lwl-x6-keyboard/etc/udev/rules.d/
+
+	mkdir -p debian/lwl-x6-keyboard/usr/lib/rusty-kb
+	cp defaults/colors.txt debian/lwl-x6-keyboard/usr/lib/rusty-kb/
+
+override_dh_link:
+	dh_link
+	mkdir -p debian/lwl-x6-keyboard/usr/share/icons/hicolor/symbolic/apps
+	ln -s ../256x256/apps/rusty-kb.png debian/lwl-x6-keyboard/usr/share/icons/hicolor/symbolic/apps/rusty-kb.png || true
+
+override_dh_makeshlibs:
+	dh_makeshlibs -n
+
+override_dh_shlibdeps:
+	dh_shlibdeps -n
